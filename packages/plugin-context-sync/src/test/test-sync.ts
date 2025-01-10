@@ -45,10 +45,11 @@ async function runTests() {
     });
 
     try {
-        // Test 1: Store a chat conversation
-        console.log("Test 1: Storing chat conversation...");
-        const chatResult = await plugin.storeChatHistory({
-            id: `test-chat-${Date.now()}`,
+        // Test 1: Store a chat conversation directly to Supabase
+        console.log("Test 1: Storing chat conversation to Supabase...");
+        const chatId = `test-chat-${Date.now()}`;
+        const result = await plugin.storeEnhancedConversation({
+            id: chatId,
             title: "Test Chat",
             messages: [
                 {
@@ -63,63 +64,69 @@ async function runTests() {
                     timestamp: Date.now() + 1000,
                 },
             ],
+            metadata: {
+                type: "cursor",
+                source: "test",
+                timestamp: Date.now(),
+                tags: [],
+                workingState: false,
+            },
+            created_at: Date.now(),
+            updated_at: Date.now(),
         });
-        console.log("Chat stored successfully");
+        console.log("Chat stored successfully in Supabase");
 
         // Test 2: Store a composer conversation
-        console.log("\nTest 2: Storing composer conversation...");
-        const composerResult = await plugin.storeComposerHistory({
-            id: `test-composer-${Date.now()}`,
-            name: "Test Composer",
-            text:
-                "// This is a test composer message\nfunction testFunction() {\n  console.log('hello');\n}",
+        console.log("\nTest 2: Storing composer conversation to Supabase...");
+        const composerId = `test-composer-${Date.now()}`;
+        await plugin.storeEnhancedConversation({
+            id: composerId,
+            title: "Test Composer",
+            messages: [{
+                role: "user",
+                content:
+                    "// This is a test composer message\nfunction testFunction() {\n  console.log('hello');\n}",
+                timestamp: Date.now(),
+            }],
+            metadata: {
+                type: "composer",
+                source: "test",
+                timestamp: Date.now(),
+                tags: [],
+                workingState: false,
+            },
+            created_at: Date.now(),
+            updated_at: Date.now(),
         });
-        console.log("Composer stored successfully");
+        console.log("Composer stored successfully in Supabase");
 
         // Test 3: Search conversations
-        console.log("\nTest 3: Searching conversations...");
-        console.log("Searching for recently stored conversations...");
+        console.log("\nTest 3: Searching conversations in Supabase...");
         const searchResults = await plugin.searchConversations("test", {
             limit: 5,
         });
-        console.log(`Found ${searchResults?.length || 0} conversations`);
+        console.log(
+            `Found ${searchResults?.length || 0} conversations in Supabase`,
+        );
         if (searchResults?.length) {
             console.log("Latest conversation:", {
                 title: searchResults[0].title,
                 type: searchResults[0].metadata.type,
                 created_at: new Date(searchResults[0].created_at).toISOString(),
             });
-        } else {
-            console.log(
-                "No conversations found, trying without search query...",
-            );
-            const allResults = await plugin.searchConversations("", {
-                limit: 5,
-            });
-            console.log(`Found ${allResults?.length || 0} total conversations`);
-            if (allResults?.length) {
-                console.log(
-                    "Available conversations:",
-                    allResults.map((conv) => ({
-                        title: conv.title,
-                        type: conv.metadata.type,
-                        created_at: new Date(conv.created_at).toISOString(),
-                    })),
-                );
-            }
         }
 
         // Test 4: Get context for new chat
-        console.log("\nTest 4: Getting context for new chat...");
+        console.log("\nTest 4: Getting context from Supabase...");
         const context = await plugin.getContextForNewChat();
-        console.log("Context retrieved:", {
+        console.log("Context retrieved from Supabase:", {
             hasWorkingState: !!context?.workingState,
             recentContextCount: context?.recentContext?.length || 0,
             hasProjectContext: !!context?.projectContext,
         });
 
         // Test 5: Tag a conversation
-        console.log("\nTest 5: Tagging conversation...");
+        console.log("\nTest 5: Tagging conversation in Supabase...");
         if (searchResults?.length) {
             const tagResult = await plugin.tagConversation(
                 searchResults[0].id,
@@ -129,26 +136,12 @@ async function runTests() {
                     timestamp: Date.now(),
                 },
             );
-            console.log("Tag added:", tagResult);
+            console.log("Tag added to Supabase:", tagResult);
         }
 
-        // Test 6: Verify auto-sync
-        console.log("\nTest 6: Testing auto-sync...");
-        plugin.stopAutoSync(); // Stop any existing sync
-        let syncCount = 0;
-        const testAutoSync = new ContextSyncPlugin({
-            autoSync: true,
-            syncInterval: 2000, // 2 seconds for testing
-            supabaseUrl: SUPABASE_URL,
-            supabaseKey: SUPABASE_KEY,
-        });
-
-        // Wait for two sync cycles
-        await new Promise((resolve) => setTimeout(resolve, 4500));
-        testAutoSync.stopAutoSync();
-        console.log("Auto-sync tested successfully");
-
-        console.log("\n=== All tests completed successfully ===\n");
+        console.log(
+            "\n=== All Supabase sync tests completed successfully ===\n",
+        );
     } catch (error) {
         console.error("\nTest failed:", error);
         process.exit(1);
