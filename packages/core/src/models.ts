@@ -45,19 +45,17 @@ export const models: Models = {
         },
     },
     [ModelProviderName.ANTHROPIC]: {
+        endpoint: "https://api.anthropic.com/v1",
         settings: {
             stop: [],
             maxInputTokens: 200000,
             maxOutputTokens: 4096,
-            frequency_penalty: 0.4,
-            presence_penalty: 0.4,
-            temperature: 0.7,
+            temperature: 0.3,
         },
-        endpoint: "https://api.anthropic.com/v1",
         model: {
-            [ModelClass.SMALL]: settings.SMALL_ANTHROPIC_MODEL || "claude-3-haiku-20240307",
-            [ModelClass.MEDIUM]: settings.MEDIUM_ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022",
-            [ModelClass.LARGE]: settings.LARGE_ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022",
+            [ModelClass.SMALL]: "claude-3-haiku-20240307",
+            [ModelClass.MEDIUM]: "claude-3-sonnet-20240229",
+            [ModelClass.LARGE]: "claude-3-sonnet-20240229",
         },
     },
     [ModelProviderName.CLAUDE_VERTEX]: {
@@ -71,8 +69,8 @@ export const models: Models = {
         },
         endpoint: "https://api.anthropic.com/v1", // TODO: check
         model: {
-            [ModelClass.SMALL]: "claude-3-5-sonnet-20241022",
-            [ModelClass.MEDIUM]: "claude-3-5-sonnet-20241022",
+            [ModelClass.SMALL]: "claude-3-haiku-20240307",
+            [ModelClass.MEDIUM]: "claude-3-sonnet-20240229",
             [ModelClass.LARGE]: "claude-3-opus-20240229",
         },
     },

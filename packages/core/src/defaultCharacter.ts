@@ -5,9 +5,11 @@ export const defaultCharacter: Character = {
     username: "eliza",
     plugins: [],
     clients: [],
-    modelProvider: ModelProviderName.LLAMALOCAL,
+    modelProvider: ModelProviderName.ANTHROPIC,
     settings: {
-        secrets: {},
+        secrets: {
+            ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+        },
         voice: {
             model: "en_US-hfc_female-medium",
         },

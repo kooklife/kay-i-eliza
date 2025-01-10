@@ -3,6 +3,7 @@
     "clients": [],
     "modelProvider": "anthropic",
     "settings": {
+        "model": "claude-3-sonnet-20240229",
         "voice": {
             "model": "en_GB-danny-low"
         }
