@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { ExtractionService } from "./services/extraction.js";
 
 interface RequestMetadata {
     type: "social" | "merch" | "logo" | "website" | "creative_writing";
@@ -32,11 +33,20 @@ interface CreativeRequest {
         tone?: string;
         keywords?: string[];
         references?: string[];
-        dimensions?: {
-            width?: number;
-            height?: number;
-            unit?: string;
+        dimensions?: Array<{
+            value: number;
+            unit: string;
+        }>;
+        colors?: string[];
+        materials?: string[];
+        sentiment?: {
+            score: number;
+            confidence: number;
+            aspects: Record<string, number>;
         };
+        topics?: string[];
+        emotions?: Record<string, number>;
+        campaignSuggestions?: string[];
     };
     metadata: RequestMetadata;
     created_at: string;
@@ -70,10 +80,20 @@ interface PluginConfig {
     adaptiveThreshold: number; // Threshold for adapting extraction schema (0-1)
 }
 
+interface StructuredContent {
+    brief: string;
+    notes: string[];
+    requirements: string[];
+    keywords?: string[];
+    topics?: string[];
+    type?: string;
+}
+
 export class CreativeRequestPlugin {
     private supabase;
     private extractionPatterns: Map<string, Array<RegExp>> = new Map();
     private fieldFrequency: Map<string, Map<string, number>> = new Map();
+    private extractionService: ExtractionService;
 
     constructor(
         private config: PluginConfig = {
@@ -89,6 +109,12 @@ export class CreativeRequestPlugin {
         this.supabase = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL || "",
             process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+        );
+
+        // Initialize extraction service
+        this.extractionService = new ExtractionService(
+            process.env.OPENAI_API_KEY || "",
+            process.env.HUGGINGFACE_API_KEY || "",
         );
 
         if (this.config.batchProcessingEnabled) {
@@ -269,78 +295,43 @@ export class CreativeRequestPlugin {
     }
 
     // Private helper methods
-    private async extractStructuredContent(rawContent: string) {
+    private async extractStructuredContent(
+        rawContent: string,
+    ): Promise<StructuredContent> {
         try {
-            // First, determine the type of request
-            const initialAnalysisPrompt = `
-            Analyze this creative request and determine its primary type and any secondary types.
-            Possible types include but are not limited to:
-            - Social media content (specify platform if mentioned)
-            - Merchandise design
-            - Logo/branding work
-            - Website updates
-            - Creative writing
-            - Marketing copy
-            - Video content
-            - Email campaign
-            - Print materials
-            - Product photography
-
-            Also identify if this is a:
-            1. New request
-            2. Revision of existing work
-            3. Part of a larger campaign
-            4. Time-sensitive request
-
-            Request:
-            ${rawContent}
-            `;
-
-            // TODO: Call AI for initial analysis
-            // This will be replaced with actual AI call
-            const requestType = await this.determineRequestType({
-                brief: rawContent,
-                requirements: [],
-                notes: [],
-            });
-
-            // Define type-specific extraction schema
-            const extractionSchema = this.getExtractionSchemaForType(
-                requestType,
-            );
-
-            // Build dynamic analysis prompt based on type
-            const detailedAnalysisPrompt = `
-            Analyze this ${requestType} request and extract the following components:
-            ${
-                extractionSchema.map((field) => `- ${field.description}`).join(
-                    "\n",
-                )
-            }
-
-            Request:
-            ${rawContent}
-            `;
-
-            // TODO: Call AI for detailed analysis
-            // For now, return basic structure
-            const analysis = await this.extractBySchema(
+            // Analyze content using the extraction service
+            const analysis = await this.extractionService.analyzeContent(
                 rawContent,
-                extractionSchema,
             );
 
             return {
-                brief: analysis.brief || rawContent,
-                requirements: analysis.requirements || [],
-                notes: analysis.notes || [],
-                ...this.filterRelevantFields(analysis, extractionSchema),
+                brief: analysis.brief,
+                notes: [
+                    analysis.platform
+                        ? `Target platform: ${analysis.platform}`
+                        : null,
+                    analysis.colors.length > 0
+                        ? `Colors: ${analysis.colors.join(", ")}`
+                        : null,
+                    analysis.dimensions.length > 0
+                        ? `Dimensions: ${
+                            analysis.dimensions.map((d) =>
+                                `${d.value}${d.unit}`
+                            ).join(", ")
+                        }`
+                        : null,
+                ].filter((note): note is string => note !== null),
+                requirements: analysis.requirements,
+                keywords: analysis.keywords,
+                topics: analysis.topics,
+                type: analysis.type,
             };
         } catch (error) {
             console.error("Error extracting structured content:", error);
             return {
                 brief: rawContent,
-                requirements: [],
                 notes: ["Error during content analysis"],
+                requirements: [],
             };
         }
     }

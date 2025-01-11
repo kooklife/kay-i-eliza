@@ -45,7 +45,8 @@ export class AirtableAuthService {
             client_id: this.clientId,
             redirect_uri: this.redirectUri,
             response_type: "code",
-            scope: "data.records:read data.records:write schema.bases:read",
+            scope:
+                "data.records:read data.records:write schema.bases:read schema.bases:write",
             code_challenge: codeChallenge,
             code_challenge_method: "S256",
             state,

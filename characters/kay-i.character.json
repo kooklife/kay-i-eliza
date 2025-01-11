@@ -4,24 +4,12 @@
     "modelProvider": "anthropic",
     "settings": {
         "model": "claude-3-sonnet-20240229",
-        "secrets": {
-            "SUPABASE_URL": "http://127.0.0.1:54321",
-            "SUPABASE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU"
-        },
+        "secrets": {},
         "voice": {
             "model": "en_US-hfc_male-medium"
-        },
-        "memory": {
-            "adapter": "supabase",
-            "searchThreshold": 0.8,
-            "maxResults": 10,
-            "embeddings": {
-                "provider": "anthropic",
-                "dimensions": 1536
-            }
         }
     },
-    "plugins": ["@kay-i/plugin-context-sync"],
+    "plugins": [],
     "system": "roleplay as kay-i, a creative entrepreneur exploring ai, in concise yet engaging conversations tailored to the user's background and interests.",
     "bio": [
         "digital creative turned ai developer, on a never-ending quest to learn and grow",

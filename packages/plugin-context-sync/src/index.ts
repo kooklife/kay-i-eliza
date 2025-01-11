@@ -3,23 +3,6 @@ import * as path from "path";
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
 
-declare global {
-    var cursor: {
-        registerCommand: (
-            command: string,
-            handler: () => Promise<string>,
-        ) => void;
-    };
-    interface Window {
-        cursor: {
-            registerCommand: (
-                command: string,
-                handler: () => Promise<string>,
-            ) => void;
-        };
-    }
-}
-
 interface ContextSyncOptions {
     autoSync?: boolean;
     syncInterval?: number;
@@ -151,13 +134,11 @@ async function readCursorDatabase(dbPath: string) {
 }
 
 async function initializeCursorDatabase(dbPath: string) {
-    console.log("[ContextSyncPlugin] Initializing database at:", dbPath);
     const db = await open({
         filename: dbPath,
         driver: sqlite3.Database,
     });
 
-    console.log("[ContextSyncPlugin] Creating tables if they don't exist...");
     // Create tables if they don't exist
     await db.run(`
         CREATE TABLE IF NOT EXISTS ItemTable (
@@ -186,13 +167,12 @@ async function initializeCursorDatabase(dbPath: string) {
         );
     `);
 
-    console.log("[ContextSyncPlugin] Tables created successfully");
     return db;
 }
 
 const COMMANDS = {
     SAVE_STATE: "context-sync.saveState",
-    GET_CONTEXT: "/get-context",
+    GET_CONTEXT: "context-sync.getContext",
     TAG_CONVERSATION: "context-sync.tagConversation",
     SEARCH: "context-sync.search",
 };
@@ -206,13 +186,8 @@ export class ContextSyncPlugin {
     private options: ContextSyncOptions;
     private supabase!: SupabaseClient;
     private supabaseInitialized = false;
-    private dbPath: string;
 
     constructor(options: ContextSyncOptions) {
-        console.log(
-            "[ContextSyncPlugin] Initializing plugin with options:",
-            options,
-        );
         this.options = { ...this.defaultOptions, ...options };
 
         if (!options.supabaseUrl || !options.supabaseKey) {
@@ -220,32 +195,18 @@ export class ContextSyncPlugin {
         }
 
         if (this.options.autoSync) {
-            console.log("[ContextSyncPlugin] Starting auto-sync...");
             this.startAutoSync();
         }
+    }
 
-        // Get the Cursor workspace storage path
-        const homeDir = process.env.HOME || process.env.USERPROFILE;
-        if (!homeDir) {
-            throw new Error("Could not determine home directory");
+    private initSupabase() {
+        if (!this.supabaseInitialized) {
+            this.supabase = createClient(
+                this.options.supabaseUrl,
+                this.options.supabaseKey,
+            );
+            this.supabaseInitialized = true;
         }
-
-        this.dbPath = path.join(
-            homeDir,
-            "Library",
-            "Application Support",
-            "Cursor",
-            "User",
-            "workspaceStorage",
-            "*",
-            "state.vscdb",
-        );
-
-        // Initialize database
-        this.initializeDatabase();
-
-        // Register commands
-        this.registerCommands();
     }
 
     // Start auto-sync
@@ -311,7 +272,7 @@ export class ContextSyncPlugin {
         try {
             this.initSupabase();
             const { data, error } = await this.supabase
-                .from("enhanced_conversations")
+                .from("cursor_conversations")
                 .select("*")
                 .order("created_at", { ascending: false })
                 .limit(limit);
@@ -700,10 +661,6 @@ export class ContextSyncPlugin {
         name: string;
         text: string;
     }) {
-        console.log(
-            "[ContextSyncPlugin] Storing composer history:",
-            composer.id,
-        );
         const cursorDbPath = process.platform === "darwin"
             ? path.join(
                 process.env.HOME!,
@@ -719,7 +676,6 @@ export class ContextSyncPlugin {
                 ".config/Cursor/User/workspaceStorage/state.vscdb",
             );
 
-        console.log("[ContextSyncPlugin] Using database path:", cursorDbPath);
         // Initialize database first
         const db = await initializeCursorDatabase(cursorDbPath);
 
@@ -731,110 +687,57 @@ export class ContextSyncPlugin {
                     composer.text.replace(/'/g, "''")
                 }', ${now}, ${now})`,
             );
-            console.log(
-                "[ContextSyncPlugin] Successfully stored composer history",
-            );
 
             // Also sync to Supabase
             await this.syncCursorToSupabaseEnhanced(cursorDbPath);
-        } catch (error) {
-            console.error(
-                "[ContextSyncPlugin] Error storing composer history:",
-                error,
-            );
-            throw error;
         } finally {
             await db.close();
         }
     }
 
     async formatContextForInjection() {
-        console.log(
-            "[ContextSyncPlugin] Starting formatContextForInjection...",
-        );
-        try {
-            const context = await this.getContextForNewChat();
-            console.log(
-                "[ContextSyncPlugin] getContextForNewChat result:",
-                context,
-            );
-            if (!context) {
-                console.log(
-                    "[ContextSyncPlugin] No context returned from getContextForNewChat",
-                );
-                return null;
-            }
+        const context = await this.getContextForNewChat();
+        if (!context) return null;
 
-            let formattedContext = "📚 Previous Context:\n\n";
+        let formattedContext = "📚 Previous Context:\n\n";
 
-            // Add working state if exists
-            if (context.workingState) {
-                console.log(
-                    "[ContextSyncPlugin] Adding working state:",
-                    context.workingState.title,
-                );
-                formattedContext +=
-                    `🔄 Current Working State:\n${context.workingState.title}\n`;
-                if (context.workingState.metadata.files?.length) {
-                    formattedContext += "\nRelevant Files:\n";
-                    context.workingState.metadata.files.forEach(
-                        (file: FileState) => {
-                            formattedContext += `- ${file.path}\n`;
-                        },
-                    );
-                }
-                formattedContext += "\n";
-            }
-
-            // Add recent conversations
-            if (context.recentContext?.length) {
-                console.log(
-                    "[ContextSyncPlugin] Adding recent conversations:",
-                    context.recentContext.length,
-                );
-                formattedContext += "🗣️ Recent Conversations:\n";
-                context.recentContext.forEach((conv) => {
-                    formattedContext += `- ${conv.summary || conv.title}\n`;
+        // Add working state if exists
+        if (context.workingState) {
+            formattedContext +=
+                `🔄 Current Working State:\n${context.workingState.title}\n`;
+            if (context.workingState.metadata.files?.length) {
+                formattedContext += "\nRelevant Files:\n";
+                context.workingState.metadata.files.forEach((file) => {
+                    formattedContext += `- ${file.path}\n`;
                 });
-                formattedContext += "\n";
             }
-
-            // Add project context if exists
-            if (context.projectContext) {
-                console.log(
-                    "[ContextSyncPlugin] Adding project context:",
-                    context.projectContext.title,
-                );
-                formattedContext += `📋 Project Context:\n${
-                    context.projectContext.description ||
-                    context.projectContext.title
-                }\n\n`;
-            }
-
-            console.log(
-                "[ContextSyncPlugin] Formatted context:",
-                formattedContext,
-            );
-            return {
-                formattedContext,
-                rawContext: context,
-            };
-        } catch (error) {
-            console.error(
-                "[ContextSyncPlugin] Error in formatContextForInjection:",
-                error,
-            );
-            throw error;
+            formattedContext += "\n";
         }
+
+        // Add recent conversations
+        if (context.recentContext?.length) {
+            formattedContext += "🗣️ Recent Conversations:\n";
+            context.recentContext.forEach((conv) => {
+                formattedContext += `- ${conv.summary || conv.title}\n`;
+            });
+            formattedContext += "\n";
+        }
+
+        // Add project context if exists
+        if (context.projectContext) {
+            formattedContext += `📋 Project Context:\n${
+                context.projectContext.description ||
+                context.projectContext.title
+            }\n\n`;
+        }
+
+        return {
+            formattedContext,
+            rawContext: context,
+        };
     }
 
     async handleCommand(command: string, args: any) {
-        console.log(
-            "[ContextSyncPlugin] Handling command:",
-            command,
-            "with args:",
-            args,
-        );
         switch (command) {
             case COMMANDS.SAVE_STATE:
                 return await this.saveCurrentState(
@@ -842,9 +745,6 @@ export class ContextSyncPlugin {
                     args.files,
                 );
             case COMMANDS.GET_CONTEXT:
-                console.log(
-                    "[ContextSyncPlugin] Handling GET_CONTEXT through handleCommand",
-                );
                 return await this.formatContextForInjection();
             case COMMANDS.TAG_CONVERSATION:
                 return await this.tagConversation(
@@ -898,158 +798,10 @@ export class ContextSyncPlugin {
         await this.storeEnhancedConversation(conversation);
         return stateId;
     }
-
-    private registerCommands() {
-        console.log("[ContextSyncPlugin] Registering commands...");
-
-        // Try to get cursor from either global or window
-        const cursor = (typeof global !== "undefined" && global.cursor) ||
-            (typeof window !== "undefined" && (window as any).cursor);
-
-        if (cursor) {
-            console.log(
-                "[ContextSyncPlugin] Registering with Cursor's command system",
-            );
-            try {
-                // Log all registered commands before adding ours
-                console.log("[ContextSyncPlugin] Current cursor:", {
-                    hasRegisterCommand: !!cursor.registerCommand,
-                    type: typeof cursor.registerCommand,
-                });
-
-                cursor.registerCommand(COMMANDS.GET_CONTEXT, async () => {
-                    console.log(
-                        "[ContextSyncPlugin] GET_CONTEXT command triggered",
-                    );
-                    try {
-                        const result = await this.formatContextForInjection();
-                        console.log(
-                            "[ContextSyncPlugin] GET_CONTEXT result:",
-                            result,
-                        );
-                        if (!result) {
-                            return "Error: Could not retrieve context";
-                        }
-                        return result.formattedContext;
-                    } catch (error) {
-                        console.error(
-                            "[ContextSyncPlugin] Error getting context:",
-                            error,
-                        );
-                        return "Error retrieving context. Please check the logs.";
-                    }
-                });
-
-                console.log(
-                    "[ContextSyncPlugin] Successfully registered command:",
-                    COMMANDS.GET_CONTEXT,
-                );
-            } catch (error: any) {
-                console.error(
-                    "[ContextSyncPlugin] Error registering command:",
-                    error,
-                );
-                console.error("[ContextSyncPlugin] Error details:", {
-                    name: error?.name,
-                    message: error?.message,
-                    stack: error?.stack,
-                });
-            }
-        } else {
-            console.error(
-                "[ContextSyncPlugin] Cursor's command system not available",
-            );
-            console.error(
-                "[ContextSyncPlugin] global object keys:",
-                Object.keys(global),
-            );
-        }
-    }
-
-    private async getCurrentContext() {
-        console.log("[ContextSyncPlugin] Getting current context");
-        try {
-            const { chatData, composerData } = await readCursorDatabase(
-                this.dbPath,
-            );
-            return {
-                chat: chatData,
-                composer: composerData,
-                workingState: true,
-                timestamp: Date.now(),
-            };
-        } catch (error) {
-            console.error(
-                "[ContextSyncPlugin] Error in getCurrentContext:",
-                error,
-            );
-            throw error;
-        }
-    }
-
-    private async initializeDatabase() {
-        console.log("[ContextSyncPlugin] Initializing database");
-        try {
-            await initializeCursorDatabase(this.dbPath);
-        } catch (error) {
-            console.error(
-                "[ContextSyncPlugin] Error initializing database:",
-                error,
-            );
-            throw error;
-        }
-    }
-
-    private initSupabase() {
-        if (!this.supabaseInitialized) {
-            this.supabase = createClient(
-                this.options.supabaseUrl,
-                this.options.supabaseKey,
-            );
-            this.supabaseInitialized = true;
-        }
-    }
 }
 
 // Export plugin
 export { COMMANDS };
 export default function init(options: ContextSyncOptions) {
-    // Initialize plugin in browser environment
-    if (typeof window !== "undefined") {
-        console.log("[ContextSyncPlugin] Initializing in browser environment");
-        const plugin = new ContextSyncPlugin(options);
-
-        // Register commands with window.cursor
-        if (window.cursor) {
-            console.log(
-                "[ContextSyncPlugin] Registering commands with window.cursor",
-            );
-            window.cursor.registerCommand(COMMANDS.GET_CONTEXT, async () => {
-                console.log(
-                    "[ContextSyncPlugin] GET_CONTEXT command triggered in browser",
-                );
-                try {
-                    const result = await plugin.formatContextForInjection();
-                    console.log(
-                        "[ContextSyncPlugin] GET_CONTEXT result:",
-                        result,
-                    );
-                    if (!result) {
-                        return "Error: Could not retrieve context";
-                    }
-                    return result.formattedContext;
-                } catch (error) {
-                    console.error(
-                        "[ContextSyncPlugin] Error getting context:",
-                        error,
-                    );
-                    return "Error retrieving context. Please check the logs.";
-                }
-            });
-        }
-        return plugin;
-    }
-
-    // Initialize plugin in Node.js environment
     return new ContextSyncPlugin(options);
 }

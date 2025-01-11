@@ -152,4 +152,11 @@ export class AirtableService {
 
         await this.base(this.tableName).destroy(id);
     }
+
+    /**
+     * Get the Airtable base instance
+     */
+    getBase(): Airtable.Base {
+        return this.base;
+    }
 }
