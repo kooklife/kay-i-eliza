@@ -1,0 +1,25 @@
+{
+    "name": "@kay-i/plugin-context-sync",
+    "version": "0.1.0",
+    "description": "Sync context between markdown and Supabase",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "tsc",
+        "test": "ts-node src/test/test-sync.ts",
+        "dev": "tsc -w"
+    },
+    "dependencies": {
+        "@supabase/supabase-js": "^2.39.3",
+        "dotenv": "^16.4.1",
+        "sqlite": "^5.1.1",
+        "sqlite3": "^5.1.7"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.5",
+        "@types/vscode": "^1.85.0",
+        "rimraf": "^5.0.5",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.3.3"
+    }
+}

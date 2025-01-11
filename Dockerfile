@@ -1,55 +1,43 @@
-# Use a specific Node.js version for better reproducibility
-FROM node:23.3.0-slim AS builder
+FROM node:20-slim as builder
 
-# Install pnpm globally and install necessary build tools
-RUN npm install -g pnpm@9.4.0 && \
-    apt-get update && \
-    apt-get install -y git python3 make g++ && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# Install essential build tools
+RUN apt-get update && \
+    apt-get install -y python3 make g++ git && \
+    apt-get clean
 
-# Set Python 3 as the default python
-RUN ln -s /usr/bin/python3 /usr/bin/python
-
-# Set the working directory
 WORKDIR /app
 
-# Copy package.json and other configuration files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc turbo.json ./
+# Copy package files first
+COPY package.json pnpm-workspace.yaml ./
+COPY packages/core/package.json ./packages/core/
+COPY packages/create-eliza-app/package.json ./packages/create-eliza-app/
 
-# Copy the rest of the application code
-COPY agent ./agent
-COPY packages ./packages
-COPY scripts ./scripts
-COPY characters ./characters
+# Install dependencies with increased memory
+RUN npm install -g pnpm unbuild && \
+    NODE_OPTIONS="--max-old-space-size=8192" pnpm install
 
-# Install dependencies and build the project
-RUN pnpm install \
-    && pnpm build-docker \
-    && pnpm prune --prod
+# Copy source and build
+COPY . .
+RUN NODE_OPTIONS="--max-old-space-size=8192" pnpm build
 
-# Create a new stage for the final image
-FROM node:23.3.0-slim
+# Production stage
+FROM node:20-slim
 
-# Install runtime dependencies if needed
-RUN npm install -g pnpm@9.4.0 && \
-    apt-get update && \
+# Install runtime dependencies
+RUN apt-get update && \
     apt-get install -y git python3 && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    npm install -g pnpm
 
 WORKDIR /app
 
-# Copy built artifacts and production dependencies from the builder stage
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/pnpm-workspace.yaml ./
-COPY --from=builder /app/.npmrc ./
-COPY --from=builder /app/turbo.json ./
+# Copy built files and dependencies from builder
+COPY --from=builder /app/package.json /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/agent ./agent
 COPY --from=builder /app/packages ./packages
-COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/characters ./characters
 
-# Set the command to run the application
+# Expose port
+EXPOSE 3000
+
+# Start the application
 CMD ["pnpm", "start"]
