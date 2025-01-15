@@ -329,14 +329,19 @@ export class DirectClient {
                 const shouldSuppressInitialMessage =
                     action?.suppressInitialMessage;
 
+                // Only send action-generated message if it's different from the initial response
+                const shouldSendActionMessage = message &&
+                    message.text !== response.text &&
+                    message.action !== 'CONTINUE';
+
                 if (!shouldSuppressInitialMessage) {
-                    if (message) {
+                    if (shouldSendActionMessage) {
                         res.json([response, message]);
                     } else {
                         res.json([response]);
                     }
                 } else {
-                    if (message) {
+                    if (shouldSendActionMessage) {
                         res.json([message]);
                     } else {
                         res.json([]);
